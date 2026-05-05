@@ -1,5 +1,5 @@
 name: Setup Dioxus
-description: Install system dependencies, the Rust toolchain, and a workspace cache for a Dioxus project
+description: Install the Rust toolchain and a workspace cache for a Dioxus project
 inputs:
   toolchain:
     description: Rust toolchain to install (e.g. `stable`, `nightly`, `1.88.0`)
@@ -11,10 +11,6 @@ inputs:
     default: ""
   targets:
     description: Comma-separated list of toolchain targets (e.g. `wasm32-unknown-unknown`)
-    required: false
-    default: ""
-  apt-packages:
-    description: Space-separated list of apt packages to install on Linux. Set to an empty string to skip apt entirely (Mac/Windows).
     required: false
     default: ""
   cache:
@@ -44,12 +40,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Install apt packages
-      if: runner.os == 'Linux' && inputs.apt-packages != ''
-      uses: awalsh128/cache-apt-pkgs-action@2c09a5e66da6c8016428a2172bd76e5e4f14bb17 # latest/v1.5.3
-      with:
-        packages: ${{ inputs.apt-packages }}
-        version: "1.0"
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # master
       with:

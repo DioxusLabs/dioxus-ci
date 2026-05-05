@@ -79,7 +79,7 @@ jobs:
 
 ### `setup-dioxus`
 
-Install optional apt deps, the Rust toolchain, and a Swatinem cache.
+Install the Rust toolchain and a Swatinem cache.
 
 ```yaml
 - uses: ealmloff/dioxus-ci/actions/setup-dioxus@main
@@ -93,7 +93,6 @@ Install optional apt deps, the Rust toolchain, and a Swatinem cache.
 | `toolchain` | `stable` | Rust toolchain string passed to the pinned `dtolnay/rust-toolchain` action. |
 | `components` | `""` | Comma-separated toolchain components. |
 | `targets` | `""` | Comma-separated toolchain targets. |
-| `apt-packages` | `""` | Optional space-separated apt packages to install on Linux. |
 | `cache` | `"true"` | Set to `"false"` to manage caching yourself. |
 | `cache-all-crates` | `"true"` | Passed to `Swatinem/rust-cache`. |
 | `cache-on-failure` | `"false"` | Passed to `Swatinem/rust-cache`. |
@@ -192,7 +191,7 @@ Write a `404.html` next to your built site so any URL deep-links to the SPA. Opt
 
 Cargo workflows no longer accept raw command-line fragments. Use the typed inputs exposed by each workflow, such as `workspace`, `package`, `exclude`, `features`, `all-features`, `no-default-features`, `target`, `locked`, `frozen`, `offline`, and `jobs`.
 
-Reusable workflows do not expose system package or browser setup inputs. If a project needs desktop/webview apt packages, Firefox, or disk cleanup, compose a custom job from the composite actions and the setup action you want.
+Reusable workflows do not expose system package or browser setup inputs. If a project needs desktop/webview apt packages, Firefox, or disk cleanup, compose a custom job and install those dependencies explicitly in that job.
 
 ---
 
@@ -216,9 +215,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev libxdo-dev
       - uses: ealmloff/dioxus-ci/actions/setup-dioxus@main
-        with:
-          apt-packages: libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev libxdo-dev
       - run: cargo check --workspace
 ```
 

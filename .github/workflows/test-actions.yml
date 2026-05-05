@@ -76,6 +76,15 @@ jobs:
                   if needle in text:
                       failures.append(f"{path}: {message} ({needle})")
 
+          package_setup = {
+              "cache-" + "apt-pkgs-action": "apt package setup must stay out of reusable CI actions",
+          }
+          for path in checked_files:
+              text = path.read_text(encoding="utf-8")
+              for needle, message in package_setup.items():
+                  if needle in text:
+                      failures.append(f"{path}: {message} ({needle})")
+
           if failures:
               print("\n".join(failures), file=sys.stderr)
               sys.exit(1)
