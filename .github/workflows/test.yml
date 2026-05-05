@@ -78,18 +78,9 @@ on:
       jobs:
         type: string
         default: ""
-      apt-packages:
-        type: string
-        default: ""
       cache-directories:
         type: string
         default: ""
-      setup-firefox:
-        type: boolean
-        default: false
-      free-disk-space:
-        type: boolean
-        default: false
       runs-on:
         type: string
         default: ubuntu-24.04
@@ -101,16 +92,11 @@ jobs:
     runs-on: ${{ inputs.runs-on }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-      - if: inputs.free-disk-space
-        uses: ealmloff/dioxus-ci/actions/free-disk-space@main
       - uses: ealmloff/dioxus-ci/actions/setup-dioxus@main
         with:
           toolchain: ${{ inputs.toolchain }}
           components: rustfmt, clippy
-          apt-packages: ${{ inputs.apt-packages }}
           cache-directories: ${{ inputs.cache-directories }}
-      - if: inputs.setup-firefox
-        uses: browser-actions/setup-firefox@fcf821c621167805dd63a29662bd7cb5676c81a8 # v1.7.1
       - shell: bash
         env:
           WORKSPACE: ${{ inputs.workspace }}

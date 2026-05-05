@@ -27,9 +27,6 @@ on:
       toolchain:
         type: string
         default: stable
-      apt-packages:
-        type: string
-        default: ""
       runs-on:
         type: string
         default: ubuntu-latest
@@ -55,7 +52,6 @@ jobs:
         with:
           toolchain: ${{ inputs.toolchain }}
           targets: x86_64-unknown-linux-gnu,wasm32-unknown-unknown
-          apt-packages: ${{ inputs.apt-packages }}
           cache-directories: target/dx
           cache-provider: ${{ inputs.cache-provider }}
       - uses: ealmloff/dioxus-ci/actions/install-dioxus-cli@main

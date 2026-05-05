@@ -28,9 +28,6 @@ on:
       toolchain:
         type: string
         default: stable
-      apt-packages:
-        type: string
-        default: ""
       artifact-retention-days:
         type: number
         default: 7
@@ -57,7 +54,6 @@ jobs:
         with:
           toolchain: ${{ inputs.toolchain }}
           targets: x86_64-unknown-linux-gnu,wasm32-unknown-unknown
-          apt-packages: ${{ inputs.apt-packages }}
           cache-directories: target/dx
       - uses: ealmloff/dioxus-ci/actions/install-dioxus-cli@main
         with:

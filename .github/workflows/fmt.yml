@@ -31,7 +31,6 @@ jobs:
         with:
           toolchain: ${{ inputs.toolchain }}
           components: rustfmt
-          apt-packages: ""
       - shell: bash
         env:
           ALL: ${{ inputs.all }}

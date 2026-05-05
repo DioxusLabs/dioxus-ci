@@ -63,6 +63,19 @@ jobs:
                   if needle in text:
                       failures.append(f"{path}: {message} ({needle})")
 
+          workflow_setup_inputs = {
+              "apt-packages:": "reusable workflows must not expose apt setup",
+              "setup-firefox": "reusable workflows must not install browsers",
+              "browser-actions/setup-firefox": "reusable workflows must not install browsers",
+          }
+          for path in workflow_files:
+              if path.name == "test-actions.yml":
+                  continue
+              text = path.read_text(encoding="utf-8")
+              for needle, message in workflow_setup_inputs.items():
+                  if needle in text:
+                      failures.append(f"{path}: {message} ({needle})")
+
           if failures:
               print("\n".join(failures), file=sys.stderr)
               sys.exit(1)
@@ -70,7 +83,7 @@ jobs:
 
   setup-dioxus-linux:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-    name: setup-dioxus on Linux (with apt)
+    name: setup-dioxus on Linux
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -82,13 +95,12 @@ jobs:
 
   setup-dioxus-mac-skip-apt:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-    name: setup-dioxus on macOS (apt skipped)
+    name: setup-dioxus on macOS
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - uses: ./actions/setup-dioxus
         with:
-          apt-packages: ""
           targets: wasm32-unknown-unknown
       - run: rustc --version && cargo --version
 
