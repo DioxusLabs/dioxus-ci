@@ -12,6 +12,7 @@ jobs:
     name: Clean Up PR Preview
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - name: Create empty directory
         run: echo "empty_dir=$(mktemp -d)" >> "$GITHUB_ENV"
       - name: Deploy empty preview
