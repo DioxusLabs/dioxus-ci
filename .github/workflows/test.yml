@@ -80,16 +80,16 @@ on:
         default: ""
       apt-packages:
         type: string
-        default: libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev libxdo-dev
+        default: ""
       cache-directories:
         type: string
         default: ""
       setup-firefox:
         type: boolean
-        default: true
+        default: false
       free-disk-space:
         type: boolean
-        default: true
+        default: false
       runs-on:
         type: string
         default: ubuntu-24.04

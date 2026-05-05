@@ -192,6 +192,8 @@ Write a `404.html` next to your built site so any URL deep-links to the SPA. Opt
 
 Cargo workflows no longer accept raw command-line fragments. Use the typed inputs exposed by each workflow, such as `workspace`, `package`, `exclude`, `features`, `all-features`, `no-default-features`, `target`, `locked`, `frozen`, `offline`, and `jobs`.
 
+Web-only workflows default to no apt packages. The generic test workflow also defaults to no Firefox setup and no disk cleanup. Opt into desktop/webview apt packages, browser setup, or disk cleanup only when the project needs them.
+
 ---
 
 ## Recipes
@@ -213,6 +215,26 @@ jobs:
   with:
     apt-packages: ""
     targets: wasm32-unknown-unknown
+```
+
+### Run browser tests
+
+```yaml
+jobs:
+  test:
+    uses: ealmloff/dioxus-ci/.github/workflows/test.yml@main
+    with:
+      setup-firefox: true
+```
+
+### Compile Linux desktop dependencies
+
+```yaml
+jobs:
+  check:
+    uses: ealmloff/dioxus-ci/.github/workflows/check.yml@main
+    with:
+      apt-packages: libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev libxdo-dev
 ```
 
 ### Compose your own deploy job
