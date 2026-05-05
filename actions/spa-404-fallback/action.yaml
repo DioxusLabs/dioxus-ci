@@ -1,0 +1,87 @@
+name: SPA 404 Fallback
+description: Write a `404.html` that redirects to the SPA's index, optionally recognizing PR-preview subroutes
+inputs:
+  output-dir:
+    description: Directory to write `404.html` into (must already exist)
+    required: true
+  base-path:
+    description: Base path the app is deployed at (e.g. the repository name). Used to resolve the SPA root.
+    required: false
+    default: ""
+  pr-preview-prefix:
+    description: When set, recognizes URLs of the form `<base>/<prefix>/pr-<N>/...` and routes them to that preview's index.
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Write 404.html
+      shell: bash
+      env:
+        BASE_PATH: ${{ inputs.base-path }}
+        PR_PREFIX: ${{ inputs.pr-preview-prefix }}
+        OUTPUT_DIR: ${{ inputs.output-dir }}
+      run: |
+        set -euo pipefail
+        if [ ! -d "$OUTPUT_DIR" ]; then
+          echo "output-dir does not exist: $OUTPUT_DIR" >&2
+          exit 1
+        fi
+        cat > "$OUTPUT_DIR/404.html" <<'HTML_EOF'
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Loading...</title>
+            <script
+                data-base-path="__BASE_PATH__"
+                data-pr-preview-prefix="__PR_PREFIX__"
+            >
+                (function () {
+                    const script = document.currentScript;
+                    const basePath = script.getAttribute('data-base-path') || '';
+                    const prPrefix = script.getAttribute('data-pr-preview-prefix') || '';
+                    const parts = window.location.pathname.split('/').filter(Boolean);
+                    let realUrl;
+                    if (
+                        prPrefix &&
+                        parts.length >= 3 &&
+                        parts[1] === prPrefix &&
+                        /^pr-\d+$/.test(parts[2])
+                    ) {
+                        realUrl = '/' + parts.slice(0, 3).join('/') + '/';
+                    } else if (basePath) {
+                        realUrl = '/' + basePath.replace(/^\/+|\/+$/g, '') + '/';
+                    } else {
+                        realUrl = '/';
+                    }
+                    fetch(realUrl)
+                        .then(response => response.text())
+                        .then(html => {
+                            document.documentElement.innerHTML = html;
+                            document.querySelectorAll('script').forEach(oldScript => {
+                                const newScript = document.createElement('script');
+                                for (const { name, value } of oldScript.attributes) {
+                                    newScript.setAttribute(name, value);
+                                }
+                                newScript.textContent = oldScript.textContent;
+                                oldScript.replaceWith(newScript);
+                            });
+                        });
+                })();
+            </script>
+        </head>
+        <body></body>
+        </html>
+        HTML_EOF
+        # Substitute placeholders with the inputs (escape any sed-special characters in the values).
+        escape_sed() { printf '%s' "$1" | sed -e 's/[\/&|]/\\&/g'; }
+        base_escaped=$(escape_sed "$BASE_PATH")
+        prefix_escaped=$(escape_sed "$PR_PREFIX")
+        sed -i.bak \
+          -e "s|__BASE_PATH__|$base_escaped|g" \
+          -e "s|__PR_PREFIX__|$prefix_escaped|g" \
+          "$OUTPUT_DIR/404.html"
+        rm -f "$OUTPUT_DIR/404.html.bak"
+        echo "Wrote $OUTPUT_DIR/404.html"

@@ -1,0 +1,53 @@
+name: Cargo Fmt
+
+on:
+  workflow_call:
+    inputs:
+      toolchain:
+        type: string
+        default: stable
+      all:
+        type: boolean
+        default: true
+      package:
+        description: Newline-separated package names passed with `--package`.
+        type: string
+        default: ""
+      check:
+        type: boolean
+        default: true
+      runs-on:
+        type: string
+        default: ubuntu-24.04
+
+jobs:
+  fmt:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    name: Rustfmt
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: dioxuslabs/dioxus-ci/actions/setup-dioxus@v1
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          components: rustfmt
+          apt-packages: ""
+      - shell: bash
+        env:
+          ALL: ${{ inputs.all }}
+          PACKAGE: ${{ inputs.package }}
+          CHECK: ${{ inputs.check }}
+        run: |
+          set -euo pipefail
+          args=()
+          fmt_args=()
+          if [ "$ALL" = "true" ]; then args+=(--all); fi
+          while IFS= read -r item; do
+            if [ -n "$item" ]; then args+=(--package "$item"); fi
+          done <<< "$PACKAGE"
+          if [ "$CHECK" = "true" ]; then fmt_args+=(--check); fi
+          if [ "${#fmt_args[@]}" -gt 0 ]; then
+            cargo fmt "${args[@]}" -- "${fmt_args[@]}"
+          else
+            cargo fmt "${args[@]}"
+          fi

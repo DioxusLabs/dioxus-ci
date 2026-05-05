@@ -1,0 +1,116 @@
+name: Build Dioxus PR Preview
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        type: string
+        default: "."
+      ssg:
+        type: boolean
+        default: false
+      features:
+        type: string
+        default: ""
+      no-default-features:
+        type: boolean
+        default: false
+      debug-symbols:
+        type: boolean
+        default: true
+      base-path-prefix:
+        description: Top-level base path under which previews are nested. Defaults to the caller's repository name.
+        type: string
+        default: ""
+      dx-cli-version:
+        type: string
+        default: latest
+      toolchain:
+        type: string
+        default: stable
+      apt-packages:
+        type: string
+        default: libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev libxdo-dev
+      artifact-retention-days:
+        type: number
+        default: 7
+      runs-on:
+        type: string
+        default: ubuntu-latest
+
+permissions:
+  contents: read
+
+jobs:
+  build-preview:
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+    name: Build PR Preview Artifact
+    runs-on: ${{ inputs.runs-on }}
+    env:
+      CARGO_INCREMENTAL: 1
+      PREVIEW_BASE_PATH: ${{ inputs.base-path-prefix == '' && github.event.repository.name || inputs.base-path-prefix }}/pr-preview/pr-${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: dioxuslabs/dioxus-ci/actions/setup-dioxus@v1
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          targets: x86_64-unknown-linux-gnu,wasm32-unknown-unknown
+          apt-packages: ${{ inputs.apt-packages }}
+          cache-directories: target/dx
+      - uses: dioxuslabs/dioxus-ci/actions/install-dioxus-cli@v1
+        with:
+          version: ${{ inputs.dx-cli-version }}
+      - id: build
+        uses: dioxuslabs/dioxus-ci/actions/build-web@v1
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          ssg: ${{ inputs.ssg }}
+          features: ${{ inputs.features }}
+          no-default-features: ${{ inputs.no-default-features }}
+          debug-symbols: ${{ inputs.debug-symbols }}
+          base-path: ${{ env.PREVIEW_BASE_PATH }}
+      - name: Stage preview artifact
+        shell: bash
+        env:
+          OUTPUT_PATH: ${{ steps.build.outputs.output-path }}
+          ARTIFACT_DIR: ${{ runner.temp }}/dioxus-pr-preview
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MERGE_SHA: ${{ github.sha }}
+          BASE_PATH: ${{ env.PREVIEW_BASE_PATH }}
+        run: |
+          set -euo pipefail
+          rm -rf "$ARTIFACT_DIR"
+          mkdir -p "$ARTIFACT_DIR/site"
+          cp -a "$OUTPUT_PATH/." "$ARTIFACT_DIR/site/"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          artifact_dir = Path(os.environ["ARTIFACT_DIR"])
+          pr_number = int(os.environ["PR_NUMBER"])
+          metadata = {
+              "schema_version": 1,
+              "repository": os.environ["REPOSITORY"],
+              "pr_number": pr_number,
+              "head_sha": os.environ["HEAD_SHA"],
+              "merge_sha": os.environ["MERGE_SHA"],
+              "base_path": os.environ["BASE_PATH"],
+          }
+          (artifact_dir / ".dioxus-ci-preview.json").write_text(
+              json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dioxus-pr-preview-${{ github.event.pull_request.number }}
+          path: ${{ runner.temp }}/dioxus-pr-preview
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: ${{ inputs.artifact-retention-days }}
+

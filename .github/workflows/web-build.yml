@@ -1,0 +1,71 @@
+name: Dioxus Web Build
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        type: string
+        default: "."
+      ssg:
+        type: boolean
+        default: false
+      features:
+        type: string
+        default: ""
+      no-default-features:
+        type: boolean
+        default: false
+      debug-symbols:
+        type: boolean
+        default: true
+      base-path:
+        type: string
+        default: ""
+      dx-cli-version:
+        type: string
+        default: latest
+      toolchain:
+        type: string
+        default: stable
+      apt-packages:
+        type: string
+        default: libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev libxdo-dev
+      runs-on:
+        type: string
+        default: ubuntu-latest
+      submodules:
+        type: string
+        default: ""
+      cache-provider:
+        type: string
+        default: ""
+
+jobs:
+  build:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    name: Web Build
+    runs-on: ${{ inputs.runs-on }}
+    env:
+      CARGO_INCREMENTAL: 1
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          submodules: ${{ inputs.submodules }}
+      - uses: dioxuslabs/dioxus-ci/actions/setup-dioxus@v1
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          targets: x86_64-unknown-linux-gnu,wasm32-unknown-unknown
+          apt-packages: ${{ inputs.apt-packages }}
+          cache-directories: target/dx
+          cache-provider: ${{ inputs.cache-provider }}
+      - uses: dioxuslabs/dioxus-ci/actions/install-dioxus-cli@v1
+        with:
+          version: ${{ inputs.dx-cli-version }}
+      - uses: dioxuslabs/dioxus-ci/actions/build-web@v1
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          ssg: ${{ inputs.ssg }}
+          features: ${{ inputs.features }}
+          no-default-features: ${{ inputs.no-default-features }}
+          debug-symbols: ${{ inputs.debug-symbols }}
+          base-path: ${{ inputs.base-path }}

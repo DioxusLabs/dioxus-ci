@@ -1,0 +1,27 @@
+name: Install Dioxus CLI
+description: Install the `dx` CLI via cargo-binstall
+inputs:
+  version:
+    description: Version of `dioxus-cli` to install. Use `latest` to install the most recent release.
+    required: false
+    default: latest
+  force:
+    description: Pass `--force` to `cargo binstall`
+    required: false
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - name: Install cargo-binstall
+      uses: cargo-bins/cargo-binstall@9d36bebae244fb1a7fd7831d3c5a4bc8f1cab230 # main
+    - name: Install dioxus-cli
+      shell: bash
+      run: |
+        args=(dioxus-cli -y)
+        if [ "${{ inputs.force }}" = "true" ]; then
+          args+=(--force)
+        fi
+        if [ "${{ inputs.version }}" != "latest" ] && [ -n "${{ inputs.version }}" ]; then
+          args+=(--version "${{ inputs.version }}")
+        fi
+        cargo binstall "${args[@]}"

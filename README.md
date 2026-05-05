@@ -1,0 +1,241 @@
+# dioxus-ci
+
+Reusable GitHub Actions and workflows for [Dioxus](https://dioxuslabs.com) projects.
+
+Two layers:
+
+- **Composite actions**: fine-grained building blocks you drop into your own workflow.
+- **Reusable workflows**: opinionated, batteries-included flows you call with one `uses:` line.
+
+Pin this repository by tag or commit SHA in production. The internal third-party actions used by these workflows are pinned to exact commit SHAs.
+
+---
+
+## Quick start
+
+CI checks for a typical Dioxus app:
+
+```yaml
+name: CI
+on:
+  push: { branches: [main] }
+  pull_request: { types: [opened, synchronize, reopened, ready_for_review], branches: [main] }
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:  { uses: dioxuslabs/dioxus-ci/.github/workflows/check.yml@v1 }
+  test:   { uses: dioxuslabs/dioxus-ci/.github/workflows/test.yml@v1 }
+  clippy: { uses: dioxuslabs/dioxus-ci/.github/workflows/clippy.yml@v1 }
+  fmt:    { uses: dioxuslabs/dioxus-ci/.github/workflows/fmt.yml@v1 }
+```
+
+Secure PR previews on a `gh-pages` site use two workflows: one unprivileged workflow builds PR code, and a second privileged workflow publishes only the uploaded static artifact.
+
+```yaml
+# .github/workflows/pr-preview-build.yml
+name: PR Preview Build
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: pr-preview-build-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  build:
+    uses: dioxuslabs/dioxus-ci/.github/workflows/pr-preview-build.yml@v1
+    with:
+      working-directory: app
+      ssg: true
+      features: fullstack
+```
+
+```yaml
+# .github/workflows/pr-preview-publish.yml
+name: PR Preview Publish
+on:
+  workflow_run:
+    workflows: ["PR Preview Build"]
+    types: [completed]
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+concurrency:
+  group: pr-preview-publish-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+jobs:
+  publish:
+    uses: dioxuslabs/dioxus-ci/.github/workflows/pr-preview-publish.yml@v1
+    # If the build workflow sets base-path-prefix, pass the same value here.
+```
+
+---
+
+## Composite actions
+
+### `setup-dioxus`
+
+Install apt deps, the Rust toolchain, and a Swatinem cache.
+
+```yaml
+- uses: dioxuslabs/dioxus-ci/actions/setup-dioxus@v1
+  with:
+    toolchain: stable
+    targets: wasm32-unknown-unknown
+```
+
+| input | default | description |
+|---|---|---|
+| `toolchain` | `stable` | Rust toolchain string passed to the pinned `dtolnay/rust-toolchain` action. |
+| `components` | `""` | Comma-separated toolchain components. |
+| `targets` | `""` | Comma-separated toolchain targets. |
+| `apt-packages` | `libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev libxdo-dev` | Set to `""` to skip apt entirely. |
+| `cache` | `"true"` | Set to `"false"` to manage caching yourself. |
+| `cache-all-crates` | `"true"` | Passed to `Swatinem/rust-cache`. |
+| `cache-on-failure` | `"false"` | Passed to `Swatinem/rust-cache`. |
+| `cache-directories` | `""` | Extra dirs to cache. |
+| `cache-shared-key` | `""` | Passed to `Swatinem/rust-cache` `shared-key`. |
+| `cache-provider` | `""` | Passed to `Swatinem/rust-cache` `cache-provider`. |
+
+### `install-dioxus-cli`
+
+Install the `dx` CLI via [`cargo-binstall`](https://github.com/cargo-bins/cargo-binstall).
+
+```yaml
+- uses: dioxuslabs/dioxus-ci/actions/install-dioxus-cli@v1
+  with:
+    version: 0.7.7
+```
+
+| input | default | description |
+|---|---|---|
+| `version` | `latest` | Version of `dioxus-cli` to install, or `latest`. |
+| `force` | `"true"` | Pass `--force` to `cargo binstall`. |
+
+### `free-disk-space`
+
+Reclaim roughly 10-20 GB on Ubuntu runners by removing pre-installed toolchains the build does not need. No-op on non-Linux.
+
+```yaml
+- uses: dioxuslabs/dioxus-ci/actions/free-disk-space@v1
+```
+
+### `build-web`
+
+Run `dx build --web` with typed inputs for the common flags. Returns the path to the built assets.
+
+```yaml
+- id: build
+  uses: dioxuslabs/dioxus-ci/actions/build-web@v1
+  with:
+    working-directory: app
+    ssg: true
+    features: fullstack
+    base-path: my-app
+- run: ls "${{ steps.build.outputs.output-path }}"
+```
+
+| input | default | description |
+|---|---|---|
+| `working-directory` | `.` | Where `dx build` runs. |
+| `ssg` | `"false"` | When `"true"`, adds `--fullstack --ssg`. |
+| `features` | `""` | Cargo features passed as one `--features` value. |
+| `no-default-features` | `"false"` | When `"true"`, adds `--no-default-features`. |
+| `release` | `"true"` | When `"true"`, adds `--release`. |
+| `debug-symbols` | `"true"` | When `"false"`, adds `--debug-symbols false`. |
+| `base-path` | `""` | Adds `--base-path <value>` when set. |
+| `output-dir` | `""` | Explicit built asset directory to return instead of resolving the standard Dioxus output path. |
+
+| output | description |
+|---|---|
+| `output-path` | Absolute path to the built web assets. |
+| `crate-name` | Name of the built crate when auto-resolved. Empty when `output-dir` is used. |
+
+### `spa-404-fallback`
+
+Write a `404.html` next to your built site so any URL deep-links to the SPA. Optionally recognizes `<base>/<prefix>/pr-<N>/` PR-preview subroutes.
+
+```yaml
+- uses: dioxuslabs/dioxus-ci/actions/spa-404-fallback@v1
+  with:
+    output-dir: docs
+    base-path: my-app
+    pr-preview-prefix: pr-preview
+```
+
+| input | default | description |
+|---|---|---|
+| `output-dir` | required | Directory to write `404.html` into. |
+| `base-path` | `""` | Base path the app is deployed at. |
+| `pr-preview-prefix` | `""` | Recognize `<base>/<prefix>/pr-<N>/` subroutes when set. |
+
+---
+
+## Reusable workflows
+
+| workflow | purpose |
+|---|---|
+| `check.yml` | `cargo check` with typed package, feature, target, and resolver inputs. |
+| `test.yml` | `cargo test` with typed package, feature, target, and test-selection inputs. |
+| `clippy.yml` | `cargo clippy` with typed target/lint inputs and `-D warnings` by default. |
+| `fmt.yml` | `cargo fmt --all -- --check` by default. |
+| `docs.yml` | `cargo doc --workspace --no-deps --all-features --document-private-items` with denied warnings by default. |
+| `web-build.yml` | Build a Dioxus web app on every PR or push. |
+| `deploy-gh-pages.yml` | Build and deploy main to `gh-pages` with SPA 404 fallback. |
+| `pr-preview-build.yml` | Build a PR preview artifact without write permissions. |
+| `pr-preview-publish.yml` | Publish a validated preview artifact and comment on the PR. |
+| `clean-up-pr-preview.yml` | Empty the preview folder when a PR closes. |
+
+Cargo workflows no longer accept raw command-line fragments. Use the typed inputs exposed by each workflow, such as `workspace`, `package`, `exclude`, `features`, `all-features`, `no-default-features`, `target`, `locked`, `frozen`, `offline`, and `jobs`.
+
+---
+
+## Recipes
+
+### Use a custom toolchain
+
+```yaml
+jobs:
+  check:
+    uses: dioxuslabs/dioxus-ci/.github/workflows/check.yml@v1
+    with:
+      toolchain: 1.88.0
+```
+
+### Build on macOS without apt
+
+```yaml
+- uses: dioxuslabs/dioxus-ci/actions/setup-dioxus@v1
+  with:
+    apt-packages: ""
+    targets: wasm32-unknown-unknown
+```
+
+### Compose your own deploy job
+
+```yaml
+jobs:
+  custom-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: dioxuslabs/dioxus-ci/actions/setup-dioxus@v1
+        with: { targets: wasm32-unknown-unknown, cache-directories: target/dx }
+      - uses: dioxuslabs/dioxus-ci/actions/install-dioxus-cli@v1
+      - id: build
+        uses: dioxuslabs/dioxus-ci/actions/build-web@v1
+        with: { working-directory: app, ssg: true, features: fullstack, base-path: my-app }
+      - uses: dioxuslabs/dioxus-ci/actions/spa-404-fallback@v1
+        with: { output-dir: '${{ steps.build.outputs.output-path }}', base-path: my-app }
+      # Now deploy `${{ steps.build.outputs.output-path }}` wherever you like.
+```
+
+---
+
+## License
+
+Dual-licensed under [MIT](LICENSE) at your option, matching the rest of the Dioxus ecosystem.

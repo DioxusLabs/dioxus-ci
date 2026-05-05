@@ -1,0 +1,202 @@
+name: Test Actions
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  architecture-guardrails:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    name: architecture guardrails
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: raven-actions/actionlint@3a24062651993d40fed1019b58ac6fbdfbf276cc # v2.0.1
+        with:
+          version: 1.7.8
+      - name: Verify pinned actions and safe inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import pathlib
+          import re
+          import sys
+
+          root = pathlib.Path(".")
+          workflow_files = list((root / ".github" / "workflows").glob("*.yml"))
+          action_files = list((root / "actions").glob("*/action.yaml"))
+          checked_files = workflow_files + action_files
+          failures = []
+          uses_re = re.compile(r"\buses:\s*([^@\s#]+)@([^\s#]+)")
+          sha_re = re.compile(r"^[0-9a-f]{40}$")
+
+          for path in checked_files:
+              for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                  match = uses_re.search(line)
+                  if not match:
+                      continue
+                  action, ref = match.groups()
+                  if action.startswith("./") or action.startswith("dioxuslabs/dioxus-ci/"):
+                      continue
+                  if not sha_re.fullmatch(ref):
+                      failures.append(f"{path}:{line_number}: third-party action is not pinned to a commit SHA: {action}@{ref}")
+
+          text_files = checked_files + [root / "README.md"]
+          forbidden = {
+              "pull_request" + "_target": "PR previews must not use the privileged PR target event",
+              "extra" + "-args": "raw dx build argument hatches are not allowed",
+              "$" + "{{ inputs" + ".args }}": "raw cargo args input is not allowed",
+              "extra" + "=(" : "shell-splitting action inputs is not allowed",
+          }
+          for path in text_files:
+              text = path.read_text(encoding="utf-8")
+              for needle, message in forbidden.items():
+                  if needle in text:
+                      failures.append(f"{path}: {message} ({needle})")
+
+          if failures:
+              print("\n".join(failures), file=sys.stderr)
+              sys.exit(1)
+          PY
+
+  setup-dioxus-linux:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    name: setup-dioxus on Linux (with apt)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: ./actions/setup-dioxus
+        with:
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+      - run: rustc --version && cargo --version
+
+  setup-dioxus-mac-skip-apt:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    name: setup-dioxus on macOS (apt skipped)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: ./actions/setup-dioxus
+        with:
+          apt-packages: ""
+          targets: wasm32-unknown-unknown
+      - run: rustc --version && cargo --version
+
+  install-dioxus-cli:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    name: install-dioxus-cli
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: ./actions/install-dioxus-cli
+      - run: dx --version
+
+  free-disk-space:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    name: free-disk-space
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: ./actions/free-disk-space
+      - run: df -h
+
+  build-web-fixture:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    name: build-web against a fresh `dx new` fixture
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: ./actions/setup-dioxus
+        with:
+          targets: x86_64-unknown-linux-gnu,wasm32-unknown-unknown
+          cache-directories: target/dx
+      - uses: ./actions/install-dioxus-cli
+      - name: Scaffold fixture project
+        run: |
+          dx new fixture --template jumpstart --yes
+      - id: build
+        uses: ./actions/build-web
+        with:
+          working-directory: fixture
+          base-path: dioxus-ci-fixture
+      - name: Verify output exists
+        run: test -f "${{ steps.build.outputs.output-path }}/index.html"
+
+  build-web-custom-target-dir:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    name: build-web with custom CARGO_TARGET_DIR
+    runs-on: ubuntu-latest
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/custom-target
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: ./actions/setup-dioxus
+        with:
+          targets: x86_64-unknown-linux-gnu,wasm32-unknown-unknown
+          cache: "false"
+      - uses: ./actions/install-dioxus-cli
+      - name: Scaffold fixture project
+        run: dx new fixture --template jumpstart --yes
+      - id: build
+        uses: ./actions/build-web
+        with:
+          working-directory: fixture
+      - name: Verify output resolved from cargo metadata target directory
+        run: |
+          test -f "${{ steps.build.outputs.output-path }}/index.html"
+          case "${{ steps.build.outputs.output-path }}" in
+            "$CARGO_TARGET_DIR"/*) ;;
+            *) echo "output path did not use CARGO_TARGET_DIR" >&2; exit 1 ;;
+          esac
+
+  build-web-explicit-output-dir:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    name: build-web with explicit output-dir
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: ./actions/setup-dioxus
+        with:
+          targets: x86_64-unknown-linux-gnu,wasm32-unknown-unknown
+          cache: "false"
+      - uses: ./actions/install-dioxus-cli
+      - name: Scaffold fixture project
+        run: dx new fixture --template jumpstart --yes
+      - name: Build fixture manually
+        working-directory: fixture
+        run: dx build --web --release
+      - id: build
+        uses: ./actions/build-web
+        with:
+          working-directory: fixture
+          output-dir: ../target/dx/fixture/release/web/public
+      - name: Verify explicit output exists
+        run: test -f "${{ steps.build.outputs.output-path }}/index.html"
+
+  spa-404-fallback:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    name: spa-404-fallback
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - run: mkdir -p out
+      - uses: ./actions/spa-404-fallback
+        with:
+          output-dir: out
+          base-path: my-app
+          pr-preview-prefix: pr-preview
+      - name: Verify 404.html
+        run: |
+          test -f out/404.html
+          grep -q 'data-base-path="my-app"' out/404.html
+          grep -q 'data-pr-preview-prefix="pr-preview"' out/404.html

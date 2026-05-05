@@ -1,0 +1,75 @@
+name: Setup Dioxus
+description: Install system dependencies, the Rust toolchain, and a workspace cache for a Dioxus project
+inputs:
+  toolchain:
+    description: Rust toolchain to install (e.g. `stable`, `nightly`, `1.88.0`)
+    required: false
+    default: stable
+  components:
+    description: Comma-separated list of toolchain components (e.g. `rustfmt, clippy`)
+    required: false
+    default: ""
+  targets:
+    description: Comma-separated list of toolchain targets (e.g. `wasm32-unknown-unknown`)
+    required: false
+    default: ""
+  apt-packages:
+    description: Space-separated list of apt packages to install on Linux. Set to an empty string to skip apt entirely (Mac/Windows).
+    required: false
+    default: libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev libxdo-dev
+  cache:
+    description: Whether to set up Swatinem/rust-cache. Set to `false` to manage caching yourself.
+    required: false
+    default: "true"
+  cache-all-crates:
+    description: Passed through to `Swatinem/rust-cache` `cache-all-crates`
+    required: false
+    default: "true"
+  cache-on-failure:
+    description: Passed through to `Swatinem/rust-cache` `cache-on-failure`
+    required: false
+    default: "false"
+  cache-directories:
+    description: Extra directories to cache (passed through as `cache-directories`)
+    required: false
+    default: ""
+  cache-shared-key:
+    description: Passed through to `Swatinem/rust-cache` `shared-key` to share a cache across jobs
+    required: false
+    default: ""
+  cache-provider:
+    description: Passed through to `Swatinem/rust-cache` `cache-provider` (e.g. `warpbuild`). Empty uses the action default.
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Install apt packages
+      if: runner.os == 'Linux' && inputs.apt-packages != ''
+      uses: awalsh128/cache-apt-pkgs-action@2c09a5e66da6c8016428a2172bd76e5e4f14bb17 # latest/v1.5.3
+      with:
+        packages: ${{ inputs.apt-packages }}
+        version: "1.0"
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # master
+      with:
+        toolchain: ${{ inputs.toolchain }}
+        components: ${{ inputs.components }}
+        targets: ${{ inputs.targets }}
+    - name: Set up Rust cache
+      if: inputs.cache == 'true' && inputs.cache-provider == ''
+      uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+      with:
+        cache-all-crates: ${{ inputs.cache-all-crates }}
+        cache-on-failure: ${{ inputs.cache-on-failure }}
+        cache-directories: ${{ inputs.cache-directories }}
+        shared-key: ${{ inputs.cache-shared-key }}
+    - name: Set up Rust cache with custom provider
+      if: inputs.cache == 'true' && inputs.cache-provider != ''
+      uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+      with:
+        cache-all-crates: ${{ inputs.cache-all-crates }}
+        cache-on-failure: ${{ inputs.cache-on-failure }}
+        cache-directories: ${{ inputs.cache-directories }}
+        shared-key: ${{ inputs.cache-shared-key }}
+        cache-provider: ${{ inputs.cache-provider }}

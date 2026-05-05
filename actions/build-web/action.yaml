@@ -1,0 +1,105 @@
+name: Build Dioxus Web
+description: Build a Dioxus app with `dx build --web`. Supports plain web and fullstack/SSG modes.
+inputs:
+  working-directory:
+    description: Directory containing the `Cargo.toml` to build
+    required: false
+    default: "."
+  ssg:
+    description: When `true`, adds `--fullstack --ssg` (use for fullstack apps with static site generation)
+    required: false
+    default: "false"
+  features:
+    description: Comma-separated cargo features to enable. When set, adds `--features <value>`.
+    required: false
+    default: ""
+  no-default-features:
+    description: When `true`, adds `--no-default-features`
+    required: false
+    default: "false"
+  release:
+    description: When `true`, adds `--release`
+    required: false
+    default: "true"
+  debug-symbols:
+    description: When `false`, adds `--debug-symbols false`
+    required: false
+    default: "true"
+  base-path:
+    description: When set, adds `--base-path "<value>"`
+    required: false
+    default: ""
+  output-dir:
+    description: Explicit output directory to return. When empty, the action resolves the standard Dioxus output path from cargo metadata.
+    required: false
+    default: ""
+outputs:
+  output-path:
+    description: Absolute path to the directory containing the built web assets
+    value: ${{ steps.resolve.outputs.output-path }}
+  crate-name:
+    description: Name of the crate that was built
+    value: ${{ steps.resolve.outputs.crate-name }}
+runs:
+  using: composite
+  steps:
+    - name: Build with `dx`
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        RELEASE: ${{ inputs.release }}
+        SSG: ${{ inputs.ssg }}
+        NO_DEFAULT_FEATURES: ${{ inputs.no-default-features }}
+        FEATURES: ${{ inputs.features }}
+        DEBUG_SYMBOLS: ${{ inputs.debug-symbols }}
+        BASE_PATH: ${{ inputs.base-path }}
+      run: |
+        set -euo pipefail
+        args=(--web)
+        if [ "$RELEASE" = "true" ]; then args+=(--release); fi
+        if [ "$SSG" = "true" ]; then args+=(--fullstack --ssg); fi
+        if [ "$NO_DEFAULT_FEATURES" = "true" ]; then args+=(--no-default-features); fi
+        if [ -n "$FEATURES" ]; then args+=(--features "$FEATURES"); fi
+        if [ "$DEBUG_SYMBOLS" = "false" ]; then args+=(--debug-symbols false); fi
+        if [ -n "$BASE_PATH" ]; then args+=(--base-path "$BASE_PATH"); fi
+        dx build "${args[@]}"
+    - name: Resolve build output path
+      id: resolve
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        RELEASE: ${{ inputs.release }}
+        OUTPUT_DIR: ${{ inputs.output-dir }}
+      run: |
+        set -euo pipefail
+        if [ -n "$OUTPUT_DIR" ]; then
+          if [[ "$OUTPUT_DIR" = /* ]]; then
+            out="$OUTPUT_DIR"
+          else
+            out="$(pwd)/$OUTPUT_DIR"
+          fi
+          if [ ! -d "$out" ]; then
+            echo "Explicit output-dir does not exist: $out" >&2
+            exit 1
+          fi
+          echo "crate-name=" >> "$GITHUB_OUTPUT"
+          echo "output-path=$out" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        manifest="$(pwd)/Cargo.toml"
+        export MANIFEST="$manifest"
+        mapfile -t metadata < <(cargo metadata --no-deps --format-version 1 --manifest-path Cargo.toml \
+          | python3 -c "import json, os, sys; d=json.load(sys.stdin); m=os.path.realpath(os.environ['MANIFEST']); p=next(p for p in d['packages'] if os.path.realpath(p['manifest_path']) == m); print(p['name']); print(d['target_directory'])")
+        crate_name="${metadata[0]}"
+        target_dir="${metadata[1]}"
+        profile_dir="release"
+        if [ "$RELEASE" != "true" ]; then profile_dir="debug"; fi
+        out="$target_dir/dx/$crate_name/$profile_dir/web/public"
+        if [ ! -d "$out" ]; then
+          echo "Expected output directory not found at $out" >&2
+          echo "Available paths under $target_dir/dx:" >&2
+          ls -1 "$target_dir/dx" >&2 || true
+          exit 1
+        fi
+        echo "crate-name=$crate_name" >> "$GITHUB_OUTPUT"
+        echo "output-path=$out" >> "$GITHUB_OUTPUT"

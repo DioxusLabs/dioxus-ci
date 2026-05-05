@@ -1,0 +1,125 @@
+name: Cargo Doc
+
+on:
+  workflow_call:
+    inputs:
+      toolchain:
+        type: string
+        default: nightly
+      workspace:
+        type: boolean
+        default: true
+      package:
+        description: Newline-separated package names passed with `--package`.
+        type: string
+        default: ""
+      exclude:
+        description: Newline-separated package names passed with `--exclude`.
+        type: string
+        default: ""
+      features:
+        type: string
+        default: ""
+      all-features:
+        type: boolean
+        default: true
+      no-default-features:
+        type: boolean
+        default: false
+      target:
+        type: string
+        default: ""
+      no-deps:
+        type: boolean
+        default: true
+      document-private-items:
+        type: boolean
+        default: true
+      deny-warnings:
+        type: boolean
+        default: true
+      open:
+        type: boolean
+        default: false
+      locked:
+        type: boolean
+        default: false
+      frozen:
+        type: boolean
+        default: false
+      offline:
+        type: boolean
+        default: false
+      jobs:
+        type: string
+        default: ""
+      apt-packages:
+        type: string
+        default: libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev libxdo-dev
+      cache-directories:
+        type: string
+        default: ""
+      runs-on:
+        type: string
+        default: ubuntu-24.04
+
+jobs:
+  docs:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    name: Docs
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: dioxuslabs/dioxus-ci/actions/setup-dioxus@v1
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          apt-packages: ${{ inputs.apt-packages }}
+          cache-directories: ${{ inputs.cache-directories }}
+      - shell: bash
+        env:
+          WORKSPACE: ${{ inputs.workspace }}
+          PACKAGE: ${{ inputs.package }}
+          EXCLUDE: ${{ inputs.exclude }}
+          FEATURES: ${{ inputs.features }}
+          ALL_FEATURES: ${{ inputs.all-features }}
+          NO_DEFAULT_FEATURES: ${{ inputs.no-default-features }}
+          TARGET: ${{ inputs.target }}
+          NO_DEPS: ${{ inputs.no-deps }}
+          DOCUMENT_PRIVATE_ITEMS: ${{ inputs.document-private-items }}
+          DENY_WARNINGS: ${{ inputs.deny-warnings }}
+          OPEN_DOCS: ${{ inputs.open }}
+          LOCKED: ${{ inputs.locked }}
+          FROZEN: ${{ inputs.frozen }}
+          OFFLINE: ${{ inputs.offline }}
+          CARGO_JOBS: ${{ inputs.jobs }}
+        run: |
+          set -euo pipefail
+          args=()
+          rustdocflags=()
+          append_lines() {
+            local flag="$1"
+            local value="$2"
+            while IFS= read -r item; do
+              if [ -n "$item" ]; then args+=("$flag" "$item"); fi
+            done <<< "$value"
+          }
+          if [ "$WORKSPACE" = "true" ]; then args+=(--workspace); fi
+          append_lines --package "$PACKAGE"
+          append_lines --exclude "$EXCLUDE"
+          if [ -n "$FEATURES" ]; then args+=(--features "$FEATURES"); fi
+          if [ "$ALL_FEATURES" = "true" ]; then args+=(--all-features); fi
+          if [ "$NO_DEFAULT_FEATURES" = "true" ]; then args+=(--no-default-features); fi
+          if [ -n "$TARGET" ]; then args+=(--target "$TARGET"); fi
+          if [ "$NO_DEPS" = "true" ]; then args+=(--no-deps); fi
+          if [ "$DOCUMENT_PRIVATE_ITEMS" = "true" ]; then args+=(--document-private-items); fi
+          if [ "$OPEN_DOCS" = "true" ]; then args+=(--open); fi
+          if [ "$LOCKED" = "true" ]; then args+=(--locked); fi
+          if [ "$FROZEN" = "true" ]; then args+=(--frozen); fi
+          if [ "$OFFLINE" = "true" ]; then args+=(--offline); fi
+          if [ -n "$CARGO_JOBS" ]; then args+=(--jobs "$CARGO_JOBS"); fi
+          if [ "$DENY_WARNINGS" = "true" ]; then rustdocflags+=(-Dwarnings); fi
+          if [ "${#rustdocflags[@]}" -gt 0 ]; then
+            RUSTDOCFLAGS="${rustdocflags[*]}" cargo doc "${args[@]}"
+          else
+            cargo doc "${args[@]}"
+          fi
