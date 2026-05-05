@@ -59,18 +59,18 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           submodules: ${{ inputs.submodules }}
-      - uses: dioxuslabs/dioxus-ci/actions/setup-dioxus@v1
+      - uses: ealmloff/dioxus-ci/actions/setup-dioxus@main
         with:
           toolchain: ${{ inputs.toolchain }}
           targets: x86_64-unknown-linux-gnu,wasm32-unknown-unknown
           apt-packages: ${{ inputs.apt-packages }}
           cache-directories: target/dx
           cache-provider: ${{ inputs.cache-provider }}
-      - uses: dioxuslabs/dioxus-ci/actions/install-dioxus-cli@v1
+      - uses: ealmloff/dioxus-ci/actions/install-dioxus-cli@main
         with:
           version: ${{ inputs.dx-cli-version }}
       - id: build
-        uses: dioxuslabs/dioxus-ci/actions/build-web@v1
+        uses: ealmloff/dioxus-ci/actions/build-web@main
         with:
           working-directory: ${{ inputs.working-directory }}
           ssg: ${{ inputs.ssg }}
@@ -84,7 +84,7 @@ jobs:
           set -euo pipefail
           rm -rf "$GITHUB_WORKSPACE/.dioxus-ci-docs"
           cp -r "${{ steps.build.outputs.output-path }}" "$GITHUB_WORKSPACE/.dioxus-ci-docs"
-      - uses: dioxuslabs/dioxus-ci/actions/spa-404-fallback@v1
+      - uses: ealmloff/dioxus-ci/actions/spa-404-fallback@main
         with:
           output-dir: ${{ github.workspace }}/.dioxus-ci-docs
           base-path: ${{ inputs.base-path == '' && github.event.repository.name || inputs.base-path }}

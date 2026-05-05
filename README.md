@@ -24,10 +24,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
-  check:  { uses: dioxuslabs/dioxus-ci/.github/workflows/check.yml@v1 }
-  test:   { uses: dioxuslabs/dioxus-ci/.github/workflows/test.yml@v1 }
-  clippy: { uses: dioxuslabs/dioxus-ci/.github/workflows/clippy.yml@v1 }
-  fmt:    { uses: dioxuslabs/dioxus-ci/.github/workflows/fmt.yml@v1 }
+  check:  { uses: ealmloff/dioxus-ci/.github/workflows/check.yml@main }
+  test:   { uses: ealmloff/dioxus-ci/.github/workflows/test.yml@main }
+  clippy: { uses: ealmloff/dioxus-ci/.github/workflows/clippy.yml@main }
+  fmt:    { uses: ealmloff/dioxus-ci/.github/workflows/fmt.yml@main }
 ```
 
 Secure PR previews on a `gh-pages` site use two workflows: one unprivileged workflow builds PR code, and a second privileged workflow publishes only the uploaded static artifact.
@@ -46,7 +46,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   build:
-    uses: dioxuslabs/dioxus-ci/.github/workflows/pr-preview-build.yml@v1
+    uses: ealmloff/dioxus-ci/.github/workflows/pr-preview-build.yml@main
     with:
       working-directory: app
       ssg: true
@@ -69,7 +69,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish:
-    uses: dioxuslabs/dioxus-ci/.github/workflows/pr-preview-publish.yml@v1
+    uses: ealmloff/dioxus-ci/.github/workflows/pr-preview-publish.yml@main
     # If the build workflow sets base-path-prefix, pass the same value here.
 ```
 
@@ -82,7 +82,7 @@ jobs:
 Install apt deps, the Rust toolchain, and a Swatinem cache.
 
 ```yaml
-- uses: dioxuslabs/dioxus-ci/actions/setup-dioxus@v1
+- uses: ealmloff/dioxus-ci/actions/setup-dioxus@main
   with:
     toolchain: stable
     targets: wasm32-unknown-unknown
@@ -106,7 +106,7 @@ Install apt deps, the Rust toolchain, and a Swatinem cache.
 Install the `dx` CLI via [`cargo-binstall`](https://github.com/cargo-bins/cargo-binstall).
 
 ```yaml
-- uses: dioxuslabs/dioxus-ci/actions/install-dioxus-cli@v1
+- uses: ealmloff/dioxus-ci/actions/install-dioxus-cli@main
   with:
     version: 0.7.7
 ```
@@ -121,7 +121,7 @@ Install the `dx` CLI via [`cargo-binstall`](https://github.com/cargo-bins/cargo-
 Reclaim roughly 10-20 GB on Ubuntu runners by removing pre-installed toolchains the build does not need. No-op on non-Linux.
 
 ```yaml
-- uses: dioxuslabs/dioxus-ci/actions/free-disk-space@v1
+- uses: ealmloff/dioxus-ci/actions/free-disk-space@main
 ```
 
 ### `build-web`
@@ -130,7 +130,7 @@ Run `dx build --web` with typed inputs for the common flags. Returns the path to
 
 ```yaml
 - id: build
-  uses: dioxuslabs/dioxus-ci/actions/build-web@v1
+  uses: ealmloff/dioxus-ci/actions/build-web@main
   with:
     working-directory: app
     ssg: true
@@ -160,7 +160,7 @@ Run `dx build --web` with typed inputs for the common flags. Returns the path to
 Write a `404.html` next to your built site so any URL deep-links to the SPA. Optionally recognizes `<base>/<prefix>/pr-<N>/` PR-preview subroutes.
 
 ```yaml
-- uses: dioxuslabs/dioxus-ci/actions/spa-404-fallback@v1
+- uses: ealmloff/dioxus-ci/actions/spa-404-fallback@main
   with:
     output-dir: docs
     base-path: my-app
@@ -201,7 +201,7 @@ Cargo workflows no longer accept raw command-line fragments. Use the typed input
 ```yaml
 jobs:
   check:
-    uses: dioxuslabs/dioxus-ci/.github/workflows/check.yml@v1
+    uses: ealmloff/dioxus-ci/.github/workflows/check.yml@main
     with:
       toolchain: 1.88.0
 ```
@@ -209,7 +209,7 @@ jobs:
 ### Build on macOS without apt
 
 ```yaml
-- uses: dioxuslabs/dioxus-ci/actions/setup-dioxus@v1
+- uses: ealmloff/dioxus-ci/actions/setup-dioxus@main
   with:
     apt-packages: ""
     targets: wasm32-unknown-unknown
@@ -223,13 +223,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-      - uses: dioxuslabs/dioxus-ci/actions/setup-dioxus@v1
+      - uses: ealmloff/dioxus-ci/actions/setup-dioxus@main
         with: { targets: wasm32-unknown-unknown, cache-directories: target/dx }
-      - uses: dioxuslabs/dioxus-ci/actions/install-dioxus-cli@v1
+      - uses: ealmloff/dioxus-ci/actions/install-dioxus-cli@main
       - id: build
-        uses: dioxuslabs/dioxus-ci/actions/build-web@v1
+        uses: ealmloff/dioxus-ci/actions/build-web@main
         with: { working-directory: app, ssg: true, features: fullstack, base-path: my-app }
-      - uses: dioxuslabs/dioxus-ci/actions/spa-404-fallback@v1
+      - uses: ealmloff/dioxus-ci/actions/spa-404-fallback@main
         with: { output-dir: '${{ steps.build.outputs.output-path }}', base-path: my-app }
       # Now deploy `${{ steps.build.outputs.output-path }}` wherever you like.
 ```

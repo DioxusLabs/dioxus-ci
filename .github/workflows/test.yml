@@ -102,8 +102,8 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - if: inputs.free-disk-space
-        uses: dioxuslabs/dioxus-ci/actions/free-disk-space@v1
-      - uses: dioxuslabs/dioxus-ci/actions/setup-dioxus@v1
+        uses: ealmloff/dioxus-ci/actions/free-disk-space@main
+      - uses: ealmloff/dioxus-ci/actions/setup-dioxus@main
         with:
           toolchain: ${{ inputs.toolchain }}
           components: rustfmt, clippy
