@@ -19,9 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-      - uses: raven-actions/actionlint@3a24062651993d40fed1019b58ac6fbdfbf276cc # v2.0.1
-        with:
-          version: 1.7.8
+      - name: Run actionlint
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.8 .github/workflows/*.yml
       - name: Verify pinned actions and safe inputs
         shell: bash
         run: |
@@ -142,9 +141,31 @@ jobs:
           targets: x86_64-unknown-linux-gnu,wasm32-unknown-unknown
           cache-directories: target/dx
       - uses: ./actions/install-dioxus-cli
-      - name: Scaffold fixture project
+      - name: Create fixture project
         run: |
-          dx new fixture --template jumpstart --yes
+          set -euo pipefail
+          mkdir -p fixture/src
+          cat > fixture/Cargo.toml <<'EOF'
+          [package]
+          name = "fixture"
+          version = "0.1.0"
+          edition = "2021"
+
+          [dependencies]
+          dioxus = { version = "0.7.0", features = ["web"] }
+          EOF
+          cat > fixture/src/main.rs <<'EOF'
+          use dioxus::prelude::*;
+
+          fn main() {
+              dioxus::launch(App);
+          }
+
+          #[component]
+          fn App() -> Element {
+              rsx! { div { "fixture" } }
+          }
+          EOF
       - id: build
         uses: ./actions/build-web
         with:
@@ -166,8 +187,31 @@ jobs:
           targets: x86_64-unknown-linux-gnu,wasm32-unknown-unknown
           cache: "false"
       - uses: ./actions/install-dioxus-cli
-      - name: Scaffold fixture project
-        run: dx new fixture --template jumpstart --yes
+      - name: Create fixture project
+        run: |
+          set -euo pipefail
+          mkdir -p fixture/src
+          cat > fixture/Cargo.toml <<'EOF'
+          [package]
+          name = "fixture"
+          version = "0.1.0"
+          edition = "2021"
+
+          [dependencies]
+          dioxus = { version = "0.7.0", features = ["web"] }
+          EOF
+          cat > fixture/src/main.rs <<'EOF'
+          use dioxus::prelude::*;
+
+          fn main() {
+              dioxus::launch(App);
+          }
+
+          #[component]
+          fn App() -> Element {
+              rsx! { div { "fixture" } }
+          }
+          EOF
       - id: build
         uses: ./actions/build-web
         with:
@@ -191,8 +235,31 @@ jobs:
           targets: x86_64-unknown-linux-gnu,wasm32-unknown-unknown
           cache: "false"
       - uses: ./actions/install-dioxus-cli
-      - name: Scaffold fixture project
-        run: dx new fixture --template jumpstart --yes
+      - name: Create fixture project
+        run: |
+          set -euo pipefail
+          mkdir -p fixture/src
+          cat > fixture/Cargo.toml <<'EOF'
+          [package]
+          name = "fixture"
+          version = "0.1.0"
+          edition = "2021"
+
+          [dependencies]
+          dioxus = { version = "0.7.0", features = ["web"] }
+          EOF
+          cat > fixture/src/main.rs <<'EOF'
+          use dioxus::prelude::*;
+
+          fn main() {
+              dioxus::launch(App);
+          }
+
+          #[component]
+          fn App() -> Element {
+              rsx! { div { "fixture" } }
+          }
+          EOF
       - name: Build fixture manually
         working-directory: fixture
         run: dx build --web --release
