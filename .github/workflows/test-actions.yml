@@ -267,7 +267,7 @@ jobs:
         uses: ./actions/build-web
         with:
           working-directory: fixture
-          output-dir: ../target/dx/fixture/release/web/public
+          output-dir: target/dx/fixture/release/web/public
       - name: Verify explicit output exists
         run: test -f "${{ steps.build.outputs.output-path }}/index.html"
 
