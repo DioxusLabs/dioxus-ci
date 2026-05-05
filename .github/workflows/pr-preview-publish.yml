@@ -91,11 +91,6 @@ jobs:
               print(f"Preview site directory missing: {site_dir}", file=sys.stderr)
               sys.exit(1)
 
-          stage_dir = Path(os.environ["GITHUB_WORKSPACE"]) / ".dioxus-ci-preview-site"
-          if stage_dir.exists():
-              shutil.rmtree(stage_dir)
-          shutil.copytree(site_dir, stage_dir)
-
           target_folder = f"pr-preview/pr-{pr_number}/"
           metadata_base_path = str(metadata.get("base_path", "")).strip("/")
           if "://" in metadata_base_path or any(part == ".." for part in metadata_base_path.split("/")):
@@ -109,6 +104,13 @@ jobs:
               print("Artifact base path does not match the trusted preview path", file=sys.stderr)
               sys.exit(1)
 
+          deploy_root = Path(os.environ["GITHUB_WORKSPACE"]) / ".dioxus-ci-preview-deploy"
+          if deploy_root.exists():
+              shutil.rmtree(deploy_root)
+          preview_dir = deploy_root / target_folder
+          preview_dir.parent.mkdir(parents=True, exist_ok=True)
+          shutil.copytree(site_dir, preview_dir)
+
           preview_base = os.environ["PREVIEW_URL_BASE"].strip().rstrip("/")
           if preview_base:
               preview_url = f"{preview_base}/{expected_url_path}/"
@@ -117,17 +119,21 @@ jobs:
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write(f"pr-number={pr_number}\n")
-              output.write(f"stage-dir={stage_dir}\n")
-              output.write(f"target-folder={target_folder}\n")
+              output.write(f"deploy-root={deploy_root}\n")
+              output.write(f"base-path-prefix={base_path_prefix}\n")
               output.write(f"preview-url={preview_url}\n")
           PY
+      - uses: ealmloff/dioxus-ci/actions/spa-404-fallback@main
+        with:
+          output-dir: ${{ steps.preview.outputs.deploy-root }}
+          base-path: ${{ steps.preview.outputs.base-path-prefix }}
+          pr-preview-prefix: pr-preview
       - name: Deploy preview
         uses: JamesIves/github-pages-deploy-action@b36f842fa378d7cbf6695fcac86ecdcef3af8af3 # v4.2.3
         with:
           token: ${{ github.token }}
           branch: ${{ inputs.branch }}
-          folder: ${{ steps.preview.outputs.stage-dir }}
-          target-folder: ${{ steps.preview.outputs.target-folder }}
+          folder: ${{ steps.preview.outputs.deploy-root }}
           clean: false
           single-commit: true
       - name: Comment on PR
