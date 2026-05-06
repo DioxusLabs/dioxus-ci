@@ -30,47 +30,51 @@ jobs:
   fmt:    { uses: ealmloff/dioxus-ci/.github/workflows/fmt.yml@main }
 ```
 
-Secure PR previews on a `gh-pages` site use two workflows: one unprivileged workflow builds PR code, and a second privileged workflow publishes only the uploaded static artifact.
+GitHub Pages deploys use one unprivileged web build and one privileged publisher. The build workflow always uploads a static artifact; the publisher deploys it as the main site for default-branch pushes, or under `pr-preview/pr-<N>/` for pull requests.
 
 ```yaml
-# .github/workflows/pr-preview-build.yml
-name: PR Preview Build
+# .github/workflows/web.yml
+name: Web
 on:
+  push:
+    branches: [main]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
 permissions:
   contents: read
 concurrency:
-  group: pr-preview-build-${{ github.event.pull_request.number }}
+  group: web-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
   build:
-    uses: ealmloff/dioxus-ci/.github/workflows/pr-preview-build.yml@main
+    uses: ealmloff/dioxus-ci/.github/workflows/web-build.yml@main
     with:
       working-directory: app
       ssg: true
       features: fullstack
+      base-path: ${{ github.event.repository.name }}
 ```
 
 ```yaml
-# .github/workflows/pr-preview-publish.yml
-name: PR Preview Publish
+# .github/workflows/pages.yml
+name: Pages
 on:
   workflow_run:
-    workflows: ["PR Preview Build"]
+    workflows: ["Web"]
     types: [completed]
+  pull_request:
+    types: [closed]
 permissions:
   actions: read
   contents: write
   pull-requests: write
 concurrency:
-  group: pr-preview-publish-${{ github.event.workflow_run.id }}
+  group: pages-${{ github.event.workflow_run.id || github.event.pull_request.number }}
   cancel-in-progress: false
 jobs:
   publish:
-    uses: ealmloff/dioxus-ci/.github/workflows/pr-preview-publish.yml@main
-    # If the build workflow sets base-path-prefix, pass the same value here.
+    uses: ealmloff/dioxus-ci/.github/workflows/pages-publish.yml@main
 ```
 
 ---
@@ -156,7 +160,7 @@ Run `dx build --web` with typed inputs for the common flags. Returns the path to
 
 ### `spa-404-fallback`
 
-Write a `404.html` next to your built site so any URL deep-links to the SPA. Optionally recognizes `<base>/<prefix>/pr-<N>/` PR-preview subroutes.
+Write a `404.html` next to your built site so any URL deep-links to the SPA. Optionally recognizes `<base>/<prefix>/pr-<N>/` and root-level `<prefix>/pr-<N>/` PR-preview subroutes.
 
 ```yaml
 - uses: ealmloff/dioxus-ci/actions/spa-404-fallback@main
@@ -170,7 +174,7 @@ Write a `404.html` next to your built site so any URL deep-links to the SPA. Opt
 |---|---|---|
 | `output-dir` | required | Directory to write `404.html` into. |
 | `base-path` | `""` | Base path the app is deployed at. |
-| `pr-preview-prefix` | `""` | Recognize `<base>/<prefix>/pr-<N>/` subroutes when set. |
+| `pr-preview-prefix` | `""` | Recognize `<base>/<prefix>/pr-<N>/` and root-level `<prefix>/pr-<N>/` subroutes when set. |
 
 ---
 
@@ -183,11 +187,8 @@ Write a `404.html` next to your built site so any URL deep-links to the SPA. Opt
 | `clippy.yml` | `cargo clippy` with typed target/lint inputs and `-D warnings` by default. |
 | `fmt.yml` | `cargo fmt --all -- --check` by default. |
 | `docs.yml` | `cargo doc --workspace --no-deps --all-features --document-private-items` with denied warnings by default. |
-| `web-build.yml` | Build a Dioxus web app on every PR or push. |
-| `deploy-gh-pages.yml` | Build and deploy main to `gh-pages` with SPA 404 fallback. |
-| `pr-preview-build.yml` | Build a PR preview artifact without write permissions. |
-| `pr-preview-publish.yml` | Publish a validated preview artifact and comment on the PR. |
-| `clean-up-pr-preview.yml` | Empty the preview folder when a PR closes. |
+| `web-build.yml` | Build a Dioxus web app and upload a deployable Pages artifact. |
+| `pages-publish.yml` | Publish validated Pages artifacts to `gh-pages`, comment on PR previews, and remove previews when PRs close. |
 
 Cargo workflows no longer accept raw command-line fragments. Use the typed inputs exposed by each workflow, such as `workspace`, `package`, `exclude`, `features`, `all-features`, `no-default-features`, `target`, `locked`, `frozen`, `offline`, and `jobs`.
 

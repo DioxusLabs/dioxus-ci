@@ -44,15 +44,24 @@ runs:
                     const prPrefix = script.getAttribute('data-pr-preview-prefix') || '';
                     const parts = window.location.pathname.split('/').filter(Boolean);
                     let realUrl;
-                    if (
-                        prPrefix &&
-                        parts.length >= 3 &&
-                        parts[1] === prPrefix &&
-                        /^pr-\d+$/.test(parts[2])
-                    ) {
-                        realUrl = '/' + parts.slice(0, 3).join('/') + '/';
+                    const normalizedBasePath = basePath.replace(/^\/+|\/+$/g, '');
+                    const baseParts = normalizedBasePath ? normalizedBasePath.split('/').filter(Boolean) : [];
+                    const normalizedPrPrefix = prPrefix.replace(/^\/+|\/+$/g, '');
+                    let previewEnd = -1;
+                    if (normalizedPrPrefix) {
+                        const startsWithBase = baseParts.length > 0 && baseParts.every((part, index) => parts[index] === part);
+                        const prefixIndex = startsWithBase ? baseParts.length : 0;
+                        if (
+                            parts[prefixIndex] === normalizedPrPrefix &&
+                            /^pr-\d+$/.test(parts[prefixIndex + 1] || '')
+                        ) {
+                            previewEnd = prefixIndex + 2;
+                        }
+                    }
+                    if (previewEnd > 0) {
+                        realUrl = '/' + parts.slice(0, previewEnd).join('/') + '/';
                     } else if (basePath) {
-                        realUrl = '/' + basePath.replace(/^\/+|\/+$/g, '') + '/';
+                        realUrl = '/' + normalizedBasePath + '/';
                     } else {
                         realUrl = '/';
                     }

@@ -283,8 +283,81 @@ jobs:
           output-dir: out
           base-path: my-app
           pr-preview-prefix: pr-preview
+      - run: mkdir -p out-root
+      - uses: ./actions/spa-404-fallback
+        with:
+          output-dir: out-root
+          pr-preview-prefix: pr-preview
       - name: Verify 404.html
         run: |
           test -f out/404.html
           grep -q 'data-base-path="my-app"' out/404.html
           grep -q 'data-pr-preview-prefix="pr-preview"' out/404.html
+          test -f out-root/404.html
+          grep -q 'data-base-path=""' out-root/404.html
+          grep -q 'data-pr-preview-prefix="pr-preview"' out-root/404.html
+          node <<'NODE'
+          const fs = require("fs");
+          const assert = require("assert");
+
+          function loadScript(path) {
+            const html = fs.readFileSync(path, "utf8");
+            const match = html.match(/<script\b[\s\S]*?>([\s\S]*?)<\/script>/);
+            assert(match, `missing script in ${path}`);
+            return match[1];
+          }
+
+          async function assertFetches(script, attributes, pathname, expected) {
+            let fetched = "";
+            global.window = { location: { pathname } };
+            global.document = {
+              currentScript: {
+                getAttribute(name) {
+                  return attributes[name] || "";
+                },
+              },
+              documentElement: {},
+              querySelectorAll() {
+                return [];
+              },
+            };
+            global.fetch = async (url) => {
+              fetched = url;
+              return { text: async () => "<html></html>" };
+            };
+
+            eval(script);
+            await new Promise((resolve) => setImmediate(resolve));
+            assert.strictEqual(fetched, expected, pathname);
+          }
+
+          (async () => {
+            const basedScript = loadScript("out/404.html");
+            await assertFetches(
+              basedScript,
+              { "data-base-path": "my-app", "data-pr-preview-prefix": "pr-preview" },
+              "/my-app/pr-preview/pr-123/docs/guide/",
+              "/my-app/pr-preview/pr-123/",
+            );
+            await assertFetches(
+              basedScript,
+              { "data-base-path": "my-app", "data-pr-preview-prefix": "pr-preview" },
+              "/my-app/docs/guide/",
+              "/my-app/",
+            );
+
+            const rootScript = loadScript("out-root/404.html");
+            await assertFetches(
+              rootScript,
+              { "data-base-path": "", "data-pr-preview-prefix": "pr-preview" },
+              "/pr-preview/pr-123/docs/guide/",
+              "/pr-preview/pr-123/",
+            );
+            await assertFetches(
+              rootScript,
+              { "data-base-path": "", "data-pr-preview-prefix": "pr-preview" },
+              "/docs/guide/",
+              "/",
+            );
+          })();
+          NODE

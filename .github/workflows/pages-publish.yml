@@ -1,0 +1,215 @@
+name: Publish Dioxus Pages
+
+on:
+  workflow_call:
+    inputs:
+      pages-url-base:
+        description: Site root used for comments. Defaults to `https://<owner>.github.io`.
+        type: string
+        default: ""
+      branch:
+        description: GitHub Pages branch to deploy to.
+        type: string
+        default: gh-pages
+      runs-on:
+        type: string
+        default: ubuntu-latest
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+
+jobs:
+  publish:
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      (
+        github.event.workflow_run.event == 'pull_request' ||
+        (
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.head_branch == github.event.repository.default_branch
+        )
+      )
+    name: Publish Pages
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ github.event.workflow_run.id }}
+          path: ${{ runner.temp }}/dioxus-pages-download
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Validate pages artifact
+        id: pages
+        shell: bash
+        env:
+          ARTIFACT_ROOT: ${{ runner.temp }}/dioxus-pages-download
+          EXPECTED_REPOSITORY: ${{ github.repository }}
+          WORKFLOW_RUN_EVENT: ${{ github.event.workflow_run.event }}
+          WORKFLOW_RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          WORKFLOW_RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          WORKFLOW_RUN_PULL_REQUESTS: ${{ toJson(github.event.workflow_run.pull_requests) }}
+          PAGES_URL_BASE: ${{ inputs.pages-url-base }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import shutil
+          import sys
+          from pathlib import Path
+
+          def clean_path(value: object, name: str) -> str:
+              path = str(value or "").strip().strip("/")
+              if "://" in path or any(part == ".." for part in path.split("/")):
+                  print(f"{name} is not a safe URL path", file=sys.stderr)
+                  sys.exit(1)
+              return path
+
+          artifact_root = Path(os.environ["ARTIFACT_ROOT"])
+          metadata_files = list(artifact_root.glob("**/.dioxus-ci-pages.json"))
+          if len(metadata_files) != 1:
+              print(f"Expected one pages metadata file, found {len(metadata_files)}", file=sys.stderr)
+              sys.exit(1)
+
+          metadata_path = metadata_files[0]
+          metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+          if metadata.get("schema_version") != 1 or metadata.get("kind") != "dioxus-pages":
+              print("Artifact metadata schema is not supported", file=sys.stderr)
+              sys.exit(1)
+          if metadata.get("repository") != os.environ["EXPECTED_REPOSITORY"]:
+              print("Artifact repository does not match this repository", file=sys.stderr)
+              sys.exit(1)
+
+          event_name = metadata.get("event_name")
+          workflow_event = os.environ["WORKFLOW_RUN_EVENT"]
+          if event_name != workflow_event or event_name not in {"push", "pull_request"}:
+              print("Artifact event does not match the triggering workflow_run", file=sys.stderr)
+              sys.exit(1)
+
+          workflow_sha = os.environ["WORKFLOW_RUN_SHA"]
+          allowed_shas = {metadata.get("head_sha"), metadata.get("merge_sha")}
+          if workflow_sha not in allowed_shas:
+              print("Artifact SHA does not match the triggering workflow_run", file=sys.stderr)
+              sys.exit(1)
+
+          site_dir = metadata_path.parent / "site"
+          if not site_dir.is_dir():
+              print(f"Pages site directory missing: {site_dir}", file=sys.stderr)
+              sys.exit(1)
+
+          site_base_path = clean_path(metadata.get("site_base_path"), "site_base_path")
+          build_base_path = clean_path(metadata.get("base_path"), "base_path")
+          target_folder = clean_path(metadata.get("target_folder"), "target_folder")
+
+          pr_number = ""
+          publish_kind = "site"
+          if event_name == "pull_request":
+              event_prs = json.loads(os.environ["WORKFLOW_RUN_PULL_REQUESTS"] or "[]")
+              event_pr_numbers = {int(pr["number"]) for pr in event_prs if "number" in pr}
+              if len(event_pr_numbers) != 1:
+                  print(f"Expected exactly one workflow_run PR, found {sorted(event_pr_numbers)}", file=sys.stderr)
+                  sys.exit(1)
+
+              pr_number_value = next(iter(event_pr_numbers))
+              artifact_pr_number = int(metadata.get("pr_number") or 0)
+              if artifact_pr_number != pr_number_value:
+                  print(f"Artifact PR #{artifact_pr_number} does not match workflow_run PR #{pr_number_value}", file=sys.stderr)
+                  sys.exit(1)
+
+              expected_target_folder = f"pr-preview/pr-{pr_number_value}"
+              expected_base_path = "/".join(part for part in (site_base_path, expected_target_folder) if part)
+              if target_folder != expected_target_folder or build_base_path != expected_base_path:
+                  print("Artifact preview path does not match the trusted PR preview path", file=sys.stderr)
+                  sys.exit(1)
+              pr_number = str(pr_number_value)
+              publish_kind = "preview"
+          else:
+              if os.environ["WORKFLOW_RUN_BRANCH"] != os.environ["DEFAULT_BRANCH"]:
+                  print("Push artifact is not from the default branch", file=sys.stderr)
+                  sys.exit(1)
+              if target_folder or build_base_path != site_base_path:
+                  print("Push artifact path does not match the site base path", file=sys.stderr)
+                  sys.exit(1)
+
+          deploy_root = Path(os.environ["GITHUB_WORKSPACE"]) / ".dioxus-ci-pages-deploy"
+          if deploy_root.exists():
+              shutil.rmtree(deploy_root)
+          deploy_root.mkdir(parents=True)
+
+          if target_folder:
+              preview_dir = deploy_root / target_folder
+              preview_dir.parent.mkdir(parents=True, exist_ok=True)
+              shutil.copytree(site_dir, preview_dir)
+          else:
+              shutil.copytree(site_dir, deploy_root, dirs_exist_ok=True)
+
+          pages_base = os.environ["PAGES_URL_BASE"].strip().rstrip("/")
+          if not pages_base:
+              pages_base = f"https://{os.environ['REPOSITORY_OWNER']}.github.io"
+          public_path = build_base_path.strip("/")
+          public_url = f"{pages_base}/{public_path}/" if public_path else f"{pages_base}/"
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"deploy-root={deploy_root}\n")
+              output.write(f"publish-kind={publish_kind}\n")
+              output.write(f"pr-number={pr_number}\n")
+              output.write(f"site-base-path={site_base_path}\n")
+              output.write(f"public-url={public_url}\n")
+          PY
+      - uses: ealmloff/dioxus-ci/actions/spa-404-fallback@main
+        with:
+          output-dir: ${{ steps.pages.outputs.deploy-root }}
+          base-path: ${{ steps.pages.outputs.site-base-path }}
+          pr-preview-prefix: pr-preview
+      - name: Deploy site
+        if: steps.pages.outputs.publish-kind == 'site'
+        uses: JamesIves/github-pages-deploy-action@b36f842fa378d7cbf6695fcac86ecdcef3af8af3 # v4.2.3
+        with:
+          token: ${{ github.token }}
+          branch: ${{ inputs.branch }}
+          folder: ${{ steps.pages.outputs.deploy-root }}
+          clean: true
+          clean-exclude: |
+            pr-preview/**
+          single-commit: true
+      - name: Deploy preview
+        if: steps.pages.outputs.publish-kind == 'preview'
+        uses: JamesIves/github-pages-deploy-action@b36f842fa378d7cbf6695fcac86ecdcef3af8af3 # v4.2.3
+        with:
+          token: ${{ github.token }}
+          branch: ${{ inputs.branch }}
+          folder: ${{ steps.pages.outputs.deploy-root }}
+          clean: false
+          single-commit: true
+      - name: Comment on PR
+        if: steps.pages.outputs.publish-kind == 'preview'
+        uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3
+        with:
+          pr-number: ${{ steps.pages.outputs.pr-number }}
+          message: |
+            Preview available at ${{ steps.pages.outputs.public-url }}
+          comment-tag: pr-preview
+
+  cleanup-preview:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    name: Clean Up PR Preview
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Create empty directory
+        shell: bash
+        run: echo "empty_dir=$(mktemp -d)" >> "$GITHUB_ENV"
+      - name: Remove preview
+        uses: JamesIves/github-pages-deploy-action@b36f842fa378d7cbf6695fcac86ecdcef3af8af3 # v4.2.3
+        with:
+          token: ${{ github.token }}
+          branch: ${{ inputs.branch }}
+          folder: ${{ env.empty_dir }}
+          target-folder: pr-preview/pr-${{ github.event.pull_request.number }}/
+          clean: true
+          single-commit: true
