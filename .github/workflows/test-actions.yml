@@ -62,6 +62,23 @@ jobs:
                   if needle in text:
                       failures.append(f"{path}: {message} ({needle})")
 
+          for path in checked_files:
+              in_run_block = False
+              run_indent = 0
+              for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                  stripped = line.lstrip()
+                  indent = len(line) - len(stripped)
+                  if in_run_block and stripped and indent <= run_indent:
+                      in_run_block = False
+                  if re.match(r"^\s*run:\s*\|", line):
+                      in_run_block = True
+                      run_indent = indent
+                      continue
+                  if in_run_block and ("$" + "{{ inputs.") in line:
+                      failures.append(
+                          f"{path}:{line_number}: pass inputs through env before using them in shell scripts"
+                      )
+
           workflow_setup_inputs = {
               "apt-packages:": "reusable workflows must not expose apt setup",
               "setup-firefox": "reusable workflows must not install browsers",

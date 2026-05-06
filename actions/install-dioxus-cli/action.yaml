@@ -16,12 +16,16 @@ runs:
       uses: cargo-bins/cargo-binstall@9d36bebae244fb1a7fd7831d3c5a4bc8f1cab230 # main
     - name: Install dioxus-cli
       shell: bash
+      env:
+        FORCE: ${{ inputs.force }}
+        VERSION: ${{ inputs.version }}
       run: |
+        set -euo pipefail
         args=(dioxus-cli -y)
-        if [ "${{ inputs.force }}" = "true" ]; then
+        if [ "$FORCE" = "true" ]; then
           args+=(--force)
         fi
-        if [ "${{ inputs.version }}" != "latest" ] && [ -n "${{ inputs.version }}" ]; then
-          args+=(--version "${{ inputs.version }}")
+        if [ "$VERSION" != "latest" ] && [ -n "$VERSION" ]; then
+          args+=(--version "$VERSION")
         fi
         cargo binstall "${args[@]}"
