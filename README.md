@@ -190,6 +190,8 @@ Write a `404.html` next to your built site so any URL deep-links to the SPA. Opt
 | `web-build.yml` | Build a Dioxus web app and upload a deployable Pages artifact. |
 | `pages-publish.yml` | Publish validated Pages artifacts to `gh-pages`, comment on PR previews, and remove previews when PRs close. |
 
+Pages web builds time out after 45 minutes. Pages publish jobs time out after 15 minutes, and PR-preview cleanup after 10 minutes.
+
 Cargo workflows no longer accept raw command-line fragments. Use the typed inputs exposed by each workflow, such as `workspace`, `package`, `exclude`, `features`, `all-features`, `no-default-features`, `target`, `locked`, `frozen`, `offline`, and `jobs`.
 
 Reusable workflows do not expose system package or browser setup inputs. If a project needs desktop/webview apt packages, Firefox, or disk cleanup, compose a custom job and install those dependencies explicitly in that job.
