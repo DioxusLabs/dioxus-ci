@@ -54,6 +54,7 @@ jobs:
       ssg: true
       features: fullstack
       base-path: ${{ github.event.repository.name }}
+      dx-cli-version: 0.7.7
 ```
 
 ```yaml
@@ -121,7 +122,7 @@ Install the `dx` CLI via [`cargo-binstall`](https://github.com/cargo-bins/cargo-
 
 ### `free-disk-space`
 
-Reclaim roughly 10-20 GB on Ubuntu runners by removing pre-installed toolchains the build does not need. No-op on non-Linux.
+Reclaim roughly 10-20 GB on Ubuntu runners by removing pre-installed toolchains. Runs only on Linux runners.
 
 ```yaml
 - uses: ealmloff/dioxus-ci/actions/free-disk-space@main
@@ -192,9 +193,156 @@ Write a `404.html` next to your built site so any URL deep-links to the SPA. Opt
 
 Pages web builds time out after 45 minutes. Pages publish jobs time out after 15 minutes, and PR-preview cleanup after 10 minutes.
 
-Cargo workflows no longer accept raw command-line fragments. Use the typed inputs exposed by each workflow, such as `workspace`, `package`, `exclude`, `features`, `all-features`, `no-default-features`, `target`, `locked`, `frozen`, `offline`, and `jobs`.
+The cargo workflows expose typed inputs for every supported flag — use the per-workflow tables below. For desktop/webview apt packages, Firefox, or disk cleanup, compose a custom job and install those dependencies explicitly.
 
-Reusable workflows do not expose system package or browser setup inputs. If a project needs desktop/webview apt packages, Firefox, or disk cleanup, compose a custom job and install those dependencies explicitly in that job.
+Note the `all-features` defaults: `check.yml`, `clippy.yml`, and `docs.yml` default to `true`; `test.yml` defaults to `false`. Pass `all-features: false` explicitly when feature combinations matter.
+
+### `check.yml`
+
+| input | default | description |
+|---|---|---|
+| `toolchain` | `stable` | Rust toolchain string. |
+| `workspace` | `true` | Pass `--workspace`. |
+| `package` | `""` | Newline-separated package names passed with `--package`. |
+| `exclude` | `""` | Newline-separated package names passed with `--exclude`. |
+| `features` | `""` | Space-separated cargo features. |
+| `all-features` | `true` | Pass `--all-features`. |
+| `no-default-features` | `false` | Pass `--no-default-features`. |
+| `target` | `""` | Adds `--target <value>`. |
+| `all-targets` | `false` | Pass `--all-targets`. |
+| `bins` | `false` | Pass `--bins`. |
+| `examples` | `false` | Pass `--examples`. |
+| `tests` | `false` | Pass `--tests`. |
+| `benches` | `false` | Pass `--benches`. |
+| `locked` | `false` | Pass `--locked`. |
+| `frozen` | `false` | Pass `--frozen`. |
+| `offline` | `false` | Pass `--offline`. |
+| `jobs` | `""` | Adds `--jobs <value>`. |
+| `cache-directories` | `""` | Extra dirs passed to `Swatinem/rust-cache`. |
+| `runs-on` | `ubuntu-latest` | Runner label. |
+
+### `test.yml`
+
+| input | default | description |
+|---|---|---|
+| `toolchain` | `stable` | Rust toolchain string. |
+| `workspace` | `true` | Pass `--workspace`. |
+| `package` | `""` | Newline-separated `--package` names. |
+| `exclude` | `""` | Newline-separated `--exclude` names. |
+| `features` | `""` | Space-separated cargo features. |
+| `all-features` | `false` | Pass `--all-features`. |
+| `no-default-features` | `false` | Pass `--no-default-features`. |
+| `target` | `""` | Adds `--target <value>`. |
+| `test-name` | `""` | Optional cargo test filter. |
+| `lib` | `false` | Pass `--lib`. |
+| `bins` | `false` | Pass `--bins`. |
+| `examples` | `false` | Pass `--examples`. |
+| `tests` | `false` | Pass `--tests`. |
+| `benches` | `false` | Pass `--benches`. |
+| `all-targets` | `false` | Pass `--all-targets`. |
+| `doc` | `false` | Pass `--doc`. |
+| `no-run` | `false` | Pass `--no-run`. |
+| `no-fail-fast` | `false` | Pass `--no-fail-fast`. |
+| `ignored` | `false` | Pass `--ignored` after `--`. |
+| `include-ignored` | `false` | Pass `--include-ignored` after `--`. |
+| `locked` | `false` | Pass `--locked`. |
+| `frozen` | `false` | Pass `--frozen`. |
+| `offline` | `false` | Pass `--offline`. |
+| `jobs` | `""` | Adds `--jobs <value>`. |
+| `cache-directories` | `""` | Extra dirs passed to `Swatinem/rust-cache`. |
+| `runs-on` | `ubuntu-24.04` | Runner label. |
+
+### `clippy.yml`
+
+| input | default | description |
+|---|---|---|
+| `toolchain` | `stable` | Rust toolchain string. |
+| `workspace` | `true` | Pass `--workspace`. |
+| `package` | `""` | Newline-separated `--package` names. |
+| `exclude` | `""` | Newline-separated `--exclude` names. |
+| `features` | `""` | Space-separated cargo features. |
+| `all-features` | `true` | Pass `--all-features`. |
+| `no-default-features` | `false` | Pass `--no-default-features`. |
+| `target` | `""` | Adds `--target <value>`. |
+| `all-targets` | `true` | Pass `--all-targets`. |
+| `bins` | `false` | Pass `--bins`. |
+| `examples` | `true` | Pass `--examples`. |
+| `tests` | `true` | Pass `--tests`. |
+| `benches` | `false` | Pass `--benches`. |
+| `deny-warnings` | `true` | Append `-D warnings` after `--`. |
+| `deny` | `""` | Newline-separated lints passed after `--` as `-D <lint>`. |
+| `warn` | `""` | Newline-separated lints passed after `--` as `-W <lint>`. |
+| `allow` | `""` | Newline-separated lints passed after `--` as `-A <lint>`. |
+| `locked` | `false` | Pass `--locked`. |
+| `frozen` | `false` | Pass `--frozen`. |
+| `offline` | `false` | Pass `--offline`. |
+| `jobs` | `""` | Adds `--jobs <value>`. |
+| `cache-directories` | `""` | Extra dirs passed to `Swatinem/rust-cache`. |
+| `runs-on` | `ubuntu-24.04` | Runner label. |
+
+### `fmt.yml`
+
+| input | default | description |
+|---|---|---|
+| `toolchain` | `stable` | Rust toolchain string. |
+| `all` | `true` | Pass `--all`. |
+| `package` | `""` | Newline-separated `--package` names. |
+| `check` | `true` | Pass `-- --check`. |
+| `runs-on` | `ubuntu-24.04` | Runner label. |
+
+### `docs.yml`
+
+Defaults to `nightly` so `--document-private-items` works on the standard library docs.
+
+| input | default | description |
+|---|---|---|
+| `toolchain` | `nightly` | Rust toolchain string. |
+| `workspace` | `true` | Pass `--workspace`. |
+| `package` | `""` | Newline-separated `--package` names. |
+| `exclude` | `""` | Newline-separated `--exclude` names. |
+| `features` | `""` | Space-separated cargo features. |
+| `all-features` | `true` | Pass `--all-features`. |
+| `no-default-features` | `false` | Pass `--no-default-features`. |
+| `target` | `""` | Adds `--target <value>`. |
+| `no-deps` | `true` | Pass `--no-deps`. |
+| `document-private-items` | `true` | Pass `--document-private-items`. |
+| `deny-warnings` | `true` | Set `RUSTDOCFLAGS=-D warnings`. |
+| `open` | `false` | Pass `--open`. |
+| `locked` | `false` | Pass `--locked`. |
+| `frozen` | `false` | Pass `--frozen`. |
+| `offline` | `false` | Pass `--offline`. |
+| `jobs` | `""` | Adds `--jobs <value>`. |
+| `cache-directories` | `""` | Extra dirs passed to `Swatinem/rust-cache`. |
+| `runs-on` | `ubuntu-24.04` | Runner label. |
+
+### `web-build.yml`
+
+Builds a Dioxus web app and uploads a deployable Pages artifact (with metadata that `pages-publish.yml` validates).
+
+| input | default | description |
+|---|---|---|
+| `working-directory` | `.` | Where `dx build` runs. |
+| `ssg` | `false` | When `true`, adds `--fullstack --ssg`. |
+| `features` | `""` | Cargo features passed as one `--features` value. |
+| `no-default-features` | `false` | When `true`, adds `--no-default-features`. |
+| `debug-symbols` | `true` | When `false`, adds `--debug-symbols false`. |
+| `base-path` | `""` | Adds `--base-path <value>`. PR previews are built under `<base-path>/pr-preview/pr-<N>`. |
+| `artifact-retention-days` | `7` | Retention for the uploaded artifact. |
+| `dx-cli-version` | `latest` | Version of `dioxus-cli` to install. |
+| `toolchain` | `stable` | Rust toolchain string. |
+| `runs-on` | `ubuntu-latest` | Runner label. |
+| `submodules` | `""` | Forwarded to `actions/checkout` `submodules`. |
+| `cache-provider` | `""` | Forwarded to `Swatinem/rust-cache` `cache-provider`. |
+
+### `pages-publish.yml`
+
+Wire it from a separate workflow file using `workflow_run` (for publish) and `pull_request: closed` (for cleanup) — see the [Pages quick-start](#quick-start) above.
+
+| input | default | description |
+|---|---|---|
+| `pages-url-base` | `""` | Site root used for PR-preview comments. Defaults to `https://<owner>.github.io`. |
+| `branch` | `gh-pages` | GitHub Pages branch to deploy to. |
+| `runs-on` | `ubuntu-latest` | Runner label. |
 
 ---
 
