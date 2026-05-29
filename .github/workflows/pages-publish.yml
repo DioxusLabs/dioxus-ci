@@ -52,9 +52,10 @@ jobs:
           WORKFLOW_RUN_SHA: ${{ github.event.workflow_run.head_sha }}
           WORKFLOW_RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-          WORKFLOW_RUN_PULL_REQUESTS: ${{ toJson(github.event.workflow_run.pull_requests) }}
+          WORKFLOW_RUN_HEAD_REPO_ID: ${{ github.event.workflow_run.head_repository.id }}
           PAGES_URL_BASE: ${{ inputs.pages-url-base }}
           REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -62,6 +63,8 @@ jobs:
           import os
           import shutil
           import sys
+          import urllib.error
+          import urllib.request
           from pathlib import Path
 
           def clean_path(value: object, name: str) -> str:
@@ -110,16 +113,45 @@ jobs:
           pr_number = ""
           publish_kind = "site"
           if event_name == "pull_request":
-              event_prs = json.loads(os.environ["WORKFLOW_RUN_PULL_REQUESTS"] or "[]")
-              event_pr_numbers = {int(pr["number"]) for pr in event_prs if "number" in pr}
-              if len(event_pr_numbers) != 1:
-                  print(f"Expected exactly one workflow_run PR, found {sorted(event_pr_numbers)}", file=sys.stderr)
+              # Treat the artifact's pr_number as an untrusted hint, then fetch
+              # that PR and require its current head to match every dimension of
+              # the trusted workflow_run payload (sha, head repo id, head ref,
+              # open state). A fork that lies about the number has to name a PR
+              # whose head matches workflow_run.head_sha — which only the real
+              # PR can satisfy — so a single fetch is a complete check.
+              try:
+                  pr_number_value = int(metadata.get("pr_number") or 0)
+              except (TypeError, ValueError):
+                  pr_number_value = 0
+              if pr_number_value <= 0:
+                  print("Artifact metadata is missing a valid pr_number", file=sys.stderr)
                   sys.exit(1)
 
-              pr_number_value = next(iter(event_pr_numbers))
-              artifact_pr_number = int(metadata.get("pr_number") or 0)
-              if artifact_pr_number != pr_number_value:
-                  print(f"Artifact PR #{artifact_pr_number} does not match workflow_run PR #{pr_number_value}", file=sys.stderr)
+              request = urllib.request.Request(
+                  f"https://api.github.com/repos/{os.environ['EXPECTED_REPOSITORY']}/pulls/{pr_number_value}",
+                  headers={
+                      "Accept": "application/vnd.github+json",
+                      "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                      "User-Agent": "dioxus-ci-pages-publish",
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      pr = json.loads(response.read().decode("utf-8"))
+              except urllib.error.HTTPError as exc:
+                  print(f"GitHub API lookup for PR #{pr_number_value} failed: {exc.code} {exc.reason}", file=sys.stderr)
+                  sys.exit(1)
+
+              head = pr.get("head") or {}
+              head_repo = head.get("repo") or {}
+              if (
+                  pr.get("state") != "open"
+                  or head.get("sha") != workflow_sha
+                  or head.get("ref") != os.environ["WORKFLOW_RUN_BRANCH"]
+                  or head_repo.get("id") != int(os.environ["WORKFLOW_RUN_HEAD_REPO_ID"])
+              ):
+                  print(f"PR #{pr_number_value} does not match the triggering workflow_run", file=sys.stderr)
                   sys.exit(1)
 
               expected_target_folder = f"pr-preview/pr-{pr_number_value}"
