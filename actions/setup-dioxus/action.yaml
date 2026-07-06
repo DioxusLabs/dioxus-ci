@@ -40,6 +40,10 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Install system dependencies
+      if: runner.os == 'Linux'
+      shell: bash
+      run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # master
       with:
