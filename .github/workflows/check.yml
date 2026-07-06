@@ -62,6 +62,10 @@ on:
       runs-on:
         type: string
         default: ubuntu-latest
+      apt-packages:
+        description: Space-separated list of apt packages to install (e.g. `libfontconfig1-dev`).
+        type: string
+        default: ""
 
 jobs:
   check:
@@ -75,6 +79,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cache-directories: ${{ inputs.cache-directories }}
           cache-on-failure: "false"
+          apt-packages: ${{ inputs.apt-packages }}
       - shell: bash
         env:
           WORKSPACE: ${{ inputs.workspace }}

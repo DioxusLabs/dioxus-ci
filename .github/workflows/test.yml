@@ -84,6 +84,10 @@ on:
       runs-on:
         type: string
         default: ubuntu-24.04
+      apt-packages:
+        description: Space-separated list of apt packages to install (e.g. `libfontconfig1-dev`).
+        type: string
+        default: ""
 
 jobs:
   test:
@@ -97,6 +101,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           components: rustfmt, clippy
           cache-directories: ${{ inputs.cache-directories }}
+          apt-packages: ${{ inputs.apt-packages }}
       - shell: bash
         env:
           WORKSPACE: ${{ inputs.workspace }}
